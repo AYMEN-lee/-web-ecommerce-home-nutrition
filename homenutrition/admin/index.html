@@ -144,13 +144,11 @@
   #toast.success { border-color: var(--success); color: var(--success); }
   #toast.error { border-color: var(--danger); color: var(--danger); }
 
-  /* ── Image upload ── */
-  .image-upload-zone {
-    border: 2px dashed var(--border); border-radius: var(--radius); padding: 20px;
-    text-align: center; cursor: pointer; color: var(--muted); transition: border-color .2s;
-  }
-  .image-upload-zone:hover { border-color: var(--accent); }
-  .image-preview { width: 80px; height: 80px; object-fit: cover; border-radius: var(--radius); margin-top: 8px; }
+  /* ── Image field ── */
+  .image-field-row { display: flex; gap: 8px; align-items: center; }
+  .image-field-row input { flex: 1; }
+  #m-image-preview { width: 80px; height: 80px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--border); display: block; margin-top: 10px; }
+  .upload-status { font-size: 12px; margin-top: 6px; display: none; }
 
   /* ── Stats ── */
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 28px; }
@@ -310,17 +308,15 @@
             <option value="0">No — Out of Stock</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>Image URL (or upload below)</label>
-          <input id="m-image" placeholder="images/products/product.jpg">
-        </div>
-        <div class="form-group full" id="upload-section" style="display:none;">
-          <label>Upload New Image</label>
-          <div class="image-upload-zone" onclick="document.getElementById('m-image-file').click()">
-            <div>Click to upload (JPG, PNG, WebP — max 5MB)</div>
-            <img id="m-image-preview" class="image-preview" style="display:none;">
+        <div class="form-group full">
+          <label>Product Image</label>
+          <div class="image-field-row">
+            <input id="m-image" placeholder="images/products/product.jpg">
+            <button type="button" class="btn btn-ghost btn-sm" id="choose-img-btn" onclick="document.getElementById('m-image-file').click()">Choose Image</button>
           </div>
-          <input type="file" id="m-image-file" accept="image/*" style="display:none;" onchange="previewImage(this)">
+          <input type="file" id="m-image-file" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;" onchange="uploadImage(this)">
+          <img id="m-image-preview" style="display:none;">
+          <div class="upload-status" id="m-upload-status"></div>
         </div>
       </div>
     </div>
@@ -455,7 +451,13 @@
   function openProductModal(id) {
     currentProductId = id || null;
     document.getElementById("modal-title").textContent = id ? "Edit Product" : "Add Product";
-    document.getElementById("upload-section").style.display = id ? "" : "none";
+
+    const preview = document.getElementById("m-image-preview");
+    const status = document.getElementById("m-upload-status");
+    preview.style.display = "none";
+    status.style.display = "none";
+    status.textContent = "";
+    document.getElementById("m-image-file").value = "";
 
     if (id) {
       const p = allProducts.find(x => x.id === id);
@@ -472,14 +474,13 @@
       document.getElementById("m-desc-en").value = p.description.en;
       document.getElementById("m-in-stock").value = p.in_stock ? "1" : "0";
       document.getElementById("m-image").value = p.image;
+      if (p.image) { preview.src = p.image; preview.style.display = "block"; }
     } else {
-      ["m-id","m-name-ar","m-name-en","m-slug","m-cat-ar","m-cat-en","m-price","m-old-price","m-desc-ar","m-desc-en","m-image"].forEach(id => document.getElementById(id).value = "");
+      ["m-id","m-name-ar","m-name-en","m-slug","m-cat-ar","m-cat-en","m-price","m-old-price","m-desc-ar","m-desc-en","m-image"].forEach(fid => document.getElementById(fid).value = "");
       document.getElementById("m-rating").value = "5";
       document.getElementById("m-in-stock").value = "1";
     }
 
-    document.getElementById("m-image-preview").style.display = "none";
-    document.getElementById("m-image-file").value = "";
     document.getElementById("product-modal").classList.remove("hidden");
   }
 
@@ -488,12 +489,43 @@
     currentProductId = null;
   }
 
-  function previewImage(input) {
+  async function uploadImage(input) {
     const file = input.files[0];
     if (!file) return;
+
     const preview = document.getElementById("m-image-preview");
+    const status = document.getElementById("m-upload-status");
+    const btn = document.getElementById("choose-img-btn");
+
+    // Instant local preview while uploading
     preview.src = URL.createObjectURL(file);
     preview.style.display = "block";
+    status.style.display = "block";
+    status.style.color = "var(--muted)";
+    status.textContent = "Uploading...";
+    btn.disabled = true;
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await fetch(`${API}/upload-image`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      document.getElementById("m-image").value = data.image;
+      preview.src = data.image;
+      status.style.color = "var(--success)";
+      status.textContent = "✓ Image uploaded";
+    } catch (e) {
+      status.style.color = "var(--danger)";
+      status.textContent = "Upload failed: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   async function saveProduct() {
@@ -525,18 +557,6 @@
       const res = await fetch(url, { method: isEdit ? "PUT" : "POST", headers: authHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
-
-      // Upload image file if one was selected
-      const fileInput = document.getElementById("m-image-file");
-      if (fileInput.files.length > 0 && currentProductId) {
-        const formData = new FormData();
-        formData.append("image", fileInput.files[0]);
-        await fetch(`${API}/products/${data.id}/image`, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${token}` },
-          body: formData
-        });
-      }
 
       await loadProducts();
       closeProductModal();

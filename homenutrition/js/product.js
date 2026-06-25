@@ -18,12 +18,14 @@ function renderProduct(p, lang) {
 
   const isPages = window.location.pathname.includes("/pages/");
   const imgPrefix = isPages ? "../" : "";
+  // Don't prepend prefix to absolute paths (uploaded images start with /)
+  const imgSrc = (p.image.startsWith("/") || p.image.startsWith("http")) ? p.image : imgPrefix + p.image;
 
   document.getElementById("pd-root").innerHTML = `
     <div class="pd-layout">
       <div class="pd-image">
-        <img src="${imgPrefix}${p.image}" alt="${p.name[lang]}"
-             onerror="this.src='https://placehold.co/600x600/0d0d0d/ffffff?text=${encodeURIComponent(p.name[lang])}'">
+        <img src="${imgSrc}" alt="${p.name[lang]}"
+             onerror="this.style.display='none'">
       </div>
       <div class="pd-body">
         <div class="product-cat">${p.category[lang]}</div>
@@ -31,7 +33,7 @@ function renderProduct(p, lang) {
         <div class="product-rating" style="margin-bottom:10px;">${starsSvgPD(p.rating)}</div>
 
         <div class="pd-price-row">
-          <span class="pd-price">${p.price.toLocaleString()} <span data-i18n="da">DZD</span></span>
+          <span class="pd-price">${p.price.toLocaleString()} <span>${Lang.t("da")}</span></span>
           ${p.old_price ? `<span class="price-old">${p.old_price.toLocaleString()}</span>` : ""}
         </div>
 
@@ -42,13 +44,13 @@ function renderProduct(p, lang) {
         </div>
 
         <div class="pd-actions">
-          <button class="btn btn-dark" id="add-to-cart-btn" data-i18n="add_to_cart">Add To Cart</button>
+          <button class="btn btn-dark" id="add-to-cart-btn">${Lang.t("add_to_cart")}</button>
           <a class="btn btn-primary" id="buy-now-btn"
-             href="${isPages ? '../' : ''}checkout.html" data-i18n="buy_now">Buy Now</a>
+             href="${isPages ? '../' : ''}checkout.html">${Lang.t("buy_now")}</a>
         </div>
 
         <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
-        <h3 style="margin-bottom:8px;font-size:15px;" data-i18n="description">Description</h3>
+        <h3 style="margin-bottom:8px;font-size:15px;">${Lang.t("description")}</h3>
         <p class="pd-desc">${p.description[lang]}</p>
       </div>
     </div>`;

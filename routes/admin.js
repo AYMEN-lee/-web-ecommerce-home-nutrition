@@ -12,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
 
 // ── Image upload setup ───────────────────────────────────────────────────────
 
-const uploadsDir = path.join(__dirname, "..", "uploads");
+const uploadsDir = path.join(__dirname, "..", "uploads", "products");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -143,12 +143,18 @@ router.delete("/products/:id", requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-// POST /api/admin/products/:id/image
+// POST /api/admin/products/:id/image  (attach image to existing product)
 router.post("/products/:id/image", requireAdmin, upload.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No image file provided" });
-  const imageUrl = `/uploads/${req.file.filename}`;
+  const imageUrl = `/uploads/products/${req.file.filename}`;
   db.prepare("UPDATE products SET image = ? WHERE id = ?").run(imageUrl, req.params.id);
   res.json({ image: imageUrl });
+});
+
+// POST /api/admin/upload-image  (standalone upload — used when adding a new product)
+router.post("/upload-image", requireAdmin, upload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No image file provided" });
+  res.json({ image: `/uploads/products/${req.file.filename}` });
 });
 
 module.exports = router;
