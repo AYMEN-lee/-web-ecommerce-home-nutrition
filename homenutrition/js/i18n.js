@@ -37,7 +37,9 @@ const I18N = {
     back_home: "العودة للرئيسية",
     required_field: "هذا الحقل مطلوب",
     invalid_email: "بريد إلكتروني غير صالح",
-    invalid_phone: "رقم هاتف غير صالح"
+    invalid_phone: "رقم هاتف غير صالح",
+    flavor: "النكهة",
+    weight: "الوزن"
   },
   en: {
     search_placeholder: "Search for product...",
@@ -72,7 +74,9 @@ const I18N = {
     back_home: "Back to home",
     required_field: "This field is required",
     invalid_email: "Invalid email address",
-    invalid_phone: "Invalid phone number"
+    invalid_phone: "Invalid phone number",
+    flavor: "Flavor",
+    weight: "Weight"
   }
 };
 

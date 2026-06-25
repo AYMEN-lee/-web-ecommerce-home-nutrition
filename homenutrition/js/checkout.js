@@ -121,7 +121,13 @@ async function handleSubmit() {
   btn.textContent = "...";
 
   try {
-    const items = Cart.get().map(i => ({ product_id: i.product_id, qty: i.qty }));
+    const items = Cart.get().map(i => ({
+      product_id: i.product_id,
+      variant_id: i.variant_id || null,
+      flavor:     i.flavor_en  || "",
+      weight:     i.weight     || "",
+      qty:        i.qty
+    }));
     const result = await Api.submitOrder({ ...data, items });
     Cart.clear();
     showSuccessScreen(Lang.get(), result.order_id);

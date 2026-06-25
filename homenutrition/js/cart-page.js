@@ -1,10 +1,11 @@
 /* ============================================================
    cart-page.js — renders cart items, supports add/remove/qty
+   Cart items may have variant_id, flavor_en/ar, weight.
    ============================================================ */
 
 let PRODUCTS_INDEX = {};
 
-function emptyCartHtml(lang) {
+function emptyCartHtml() {
   return `
     <div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2l2.4 12.2a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 7H6"/></svg>
@@ -13,36 +14,70 @@ function emptyCartHtml(lang) {
     </div>`;
 }
 
+// Resolve the price for a cart item — use variant price when available
+function itemPrice(item, p) {
+  if (item.variant_id && p.flavors) {
+    for (const f of p.flavors) {
+      const v = f.variants.find(v => v.id === item.variant_id);
+      if (v) return v.price;
+    }
+  }
+  return p.price;
+}
+
+// Resolve the image for a cart item
+function itemImage(item, p) {
+  if (item.variant_id && p.flavors) {
+    for (const f of p.flavors) {
+      const v = f.variants.find(v => v.id === item.variant_id);
+      if (v && v.image) return v.image;
+    }
+  }
+  return p.image;
+}
+
+// Small label shown under the product name (e.g. "Natural · 300g")
+function variantLabel(item, lang) {
+  const parts = [];
+  if (item.flavor_en || item.flavor_ar) {
+    parts.push(lang === "ar" ? (item.flavor_ar || item.flavor_en) : item.flavor_en);
+  }
+  if (item.weight) parts.push(item.weight);
+  return parts.join(" · ");
+}
+
 function renderCartPage(lang) {
-  const root = document.getElementById("cart-root");
+  const root  = document.getElementById("cart-root");
   const items = Cart.get();
 
-  if (!items.length) {
-    root.innerHTML = emptyCartHtml(lang);
-    return;
-  }
+  if (!items.length) { root.innerHTML = emptyCartHtml(); Lang.apply(); return; }
 
   let total = 0;
-  const rows = items.map(item => {
+  const rows = items.map((item, idx) => {
     const p = PRODUCTS_INDEX[item.product_id];
     if (!p) return "";
-    const lineTotal = p.price * item.qty;
+    const price     = itemPrice(item, p);
+    const lineTotal = price * item.qty;
     total += lineTotal;
+    const label = variantLabel(item, lang);
+    const img   = itemImage(item, p);
+    const vid   = item.variant_id ?? "null";
     return `
       <div class="cart-item">
-        <img src="${p.image}" alt="${p.name[lang]}" onerror="this.src='https://placehold.co/100x100/0d0d0d/ffffff?text=HN'">
+        <img src="${img}" alt="${p.name[lang]}" onerror="this.src='https://placehold.co/100x100/0d0d0d/ffffff?text=HN'">
         <div class="cart-item-info">
           <div class="cart-item-name">${p.name[lang]}</div>
-          <div class="cart-item-price">${p.price.toLocaleString()} <span data-i18n="da">DZD</span></div>
+          ${label ? `<div style="font-size:12px;color:#888;margin-top:2px;">${label}</div>` : ""}
+          <div class="cart-item-price">${price.toLocaleString()} <span>${Lang.t("da")}</span></div>
           <div class="qty-control" style="margin-top:8px;">
-            <button type="button" data-decr="${p.id}">−</button>
-            <input type="number" min="1" value="${item.qty}" data-qty="${p.id}">
-            <button type="button" data-incr="${p.id}">+</button>
+            <button type="button" data-decr="${idx}">−</button>
+            <input type="number" min="1" value="${item.qty}" data-qty="${idx}">
+            <button type="button" data-incr="${idx}">+</button>
           </div>
         </div>
         <div style="text-align:end;">
-          <div style="font-weight:800;margin-bottom:10px;">${lineTotal.toLocaleString()} <span data-i18n="da">DZD</span></div>
-          <button class="cart-item-remove" data-remove="${p.id}" data-i18n="remove">Remove</button>
+          <div style="font-weight:800;margin-bottom:10px;">${lineTotal.toLocaleString()} <span>${Lang.t("da")}</span></div>
+          <button class="cart-item-remove" data-remove="${idx}">${Lang.t("remove")}</button>
         </div>
       </div>`;
   }).join("");
@@ -51,31 +86,34 @@ function renderCartPage(lang) {
     <div class="cart-layout">
       <div>${rows}</div>
       <div class="cart-summary">
-        <div class="summary-row"><span data-i18n="total">Total</span><span>${total.toLocaleString()} <span data-i18n="da">DZD</span></span></div>
-        <div class="summary-row total"><span data-i18n="total">Total</span><span>${total.toLocaleString()} <span data-i18n="da">DZD</span></span></div>
-        <a href="checkout.html" class="btn btn-primary btn-block" data-i18n="proceed_checkout">Proceed to Checkout</a>
+        <div class="summary-row total"><span>${Lang.t("total")}</span><span>${total.toLocaleString()} <span>${Lang.t("da")}</span></span></div>
+        <a href="checkout.html" class="btn btn-primary btn-block">${Lang.t("proceed_checkout")}</a>
       </div>
     </div>`;
 
+  // Wire buttons using index so we identify the exact cart item (handles duplicate products with different variants)
   root.querySelectorAll("[data-incr]").forEach(btn => btn.addEventListener("click", () => {
-    const id = Number(btn.getAttribute("data-incr"));
-    const item = Cart.get().find(i => i.product_id === id);
-    Cart.setQty(id, (item?.qty || 0) + 1);
+    const idx  = Number(btn.getAttribute("data-incr"));
+    const item = Cart.get()[idx];
+    if (item) Cart.setQty(item.product_id, item.qty + 1, item.variant_id ?? null);
     renderCartPage(Lang.get());
   }));
   root.querySelectorAll("[data-decr]").forEach(btn => btn.addEventListener("click", () => {
-    const id = Number(btn.getAttribute("data-decr"));
-    const item = Cart.get().find(i => i.product_id === id);
-    Cart.setQty(id, (item?.qty || 0) - 1);
+    const idx  = Number(btn.getAttribute("data-decr"));
+    const item = Cart.get()[idx];
+    if (item) Cart.setQty(item.product_id, item.qty - 1, item.variant_id ?? null);
     renderCartPage(Lang.get());
   }));
   root.querySelectorAll("[data-qty]").forEach(input => input.addEventListener("change", () => {
-    const id = Number(input.getAttribute("data-qty"));
-    Cart.setQty(id, Math.max(1, Number(input.value) || 1));
+    const idx  = Number(input.getAttribute("data-qty"));
+    const item = Cart.get()[idx];
+    if (item) Cart.setQty(item.product_id, Math.max(1, Number(input.value) || 1), item.variant_id ?? null);
     renderCartPage(Lang.get());
   }));
   root.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", () => {
-    Cart.remove(Number(btn.getAttribute("data-remove")));
+    const idx  = Number(btn.getAttribute("data-remove"));
+    const item = Cart.get()[idx];
+    if (item) Cart.remove(item.product_id, item.variant_id ?? null);
     renderCartPage(Lang.get());
   }));
 }
@@ -87,4 +125,4 @@ async function initCartPage() {
 }
 
 document.addEventListener("DOMContentLoaded", initCartPage);
-document.addEventListener("langchange", (e) => renderCartPage(e.detail.lang));
+document.addEventListener("langchange", e => renderCartPage(e.detail.lang));

@@ -428,6 +428,7 @@ footer.site-footer .foot-logo {
   background: var(--iron);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  position: relative;
 }
 .pd-image img { width: 100%; height: 100%; object-fit: cover; }
 .pd-title { font-size: 20px; font-weight: 800; margin: 6px 0 8px; }
@@ -560,3 +561,42 @@ footer.site-footer .foot-logo {
   .product-info { padding: 8px; }
   .form-row { grid-template-columns: 1fr; }
 }
+
+/* ── Variant selector ─────────────────────────────────────────────────────── */
+.variant-section { }
+.variant-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--steel); margin-bottom: 8px; }
+.variant-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.variant-btn {
+  padding: 7px 16px; border: 1.5px solid var(--line); border-radius: 20px;
+  background: var(--paper); color: var(--ink); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: border-color .15s, background .15s, color .15s;
+}
+.variant-btn:hover { border-color: var(--forge); }
+.variant-btn.active { border-color: var(--forge); background: var(--forge); color: #fff; }
+.variant-btn.out-of-stock { opacity: .45; cursor: not-allowed; text-decoration: line-through; }
+
+/* ── Flavor color circles ─────────────────────────────────────────── */
+.flavor-circle {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--fc, #cccccc);
+  border: 3px solid transparent;
+  cursor: pointer; padding: 0; outline: none; flex-shrink: 0;
+  transition: transform .12s, box-shadow .12s;
+}
+.flavor-circle:hover { transform: scale(1.12); }
+.flavor-circle.active {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+}
+
+/* ── Image prev/next arrows ───────────────────────────────────────── */
+.img-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(0,0,0,.42); color: #fff;
+  border: none; cursor: pointer; z-index: 2;
+  font-size: 22px; display: flex; align-items: center; justify-content: center;
+  transition: background .15s; padding: 0; line-height: 1;
+}
+.img-arrow:hover { background: rgba(0,0,0,.70); }
+.img-arrow-prev { left: 8px; }
+.img-arrow-next { right: 8px; }

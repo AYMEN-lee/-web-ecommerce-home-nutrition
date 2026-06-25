@@ -153,16 +153,24 @@ function renderProducts(lang) {
   grid.innerHTML = filtered.map(p => productCard(p, lang)).join("");
 
   grid.querySelectorAll("[data-add]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      Cart.add(Number(btn.getAttribute("data-add")), 1);
-      const original = btn.textContent.trim();
-      btn.textContent = lang === "ar" ? "✓ أُضيف" : "✓ Added";
-      btn.style.background = "var(--forge)";
-      setTimeout(() => {
-        btn.textContent = Lang.t("add_to_cart");
-        btn.style.background = "";
-      }, 1400);
-    });
+    const pid = Number(btn.getAttribute("data-add"));
+    const product = ALL_PRODUCTS.find(p => p.id === pid);
+    if (product?.has_variants) {
+      // Variant products: navigate to product page to select flavor/weight
+      btn.addEventListener("click", () => {
+        window.location.href = `pages/product.html?slug=${product.slug}`;
+      });
+    } else {
+      btn.addEventListener("click", () => {
+        Cart.add(pid, 1);
+        btn.textContent = lang === "ar" ? "✓ أُضيف" : "✓ Added";
+        btn.style.background = "var(--forge)";
+        setTimeout(() => {
+          btn.textContent = Lang.t("add_to_cart");
+          btn.style.background = "";
+        }, 1400);
+      });
+    }
   });
 }
 

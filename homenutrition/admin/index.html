@@ -157,6 +157,17 @@
   .stat-card .value { font-size: 28px; font-weight: 800; }
   .stat-card .value.accent { color: var(--accent); }
 
+  /* ── Variant admin UI ── */
+  .variants-header { display:flex; align-items:center; justify-content:space-between; margin:20px 0 10px; padding-top:16px; border-top:1px solid var(--border); }
+  .variants-header h4 { font-size:14px; font-weight:700; }
+  .flavor-card { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
+  .flavor-name-row { display:grid; grid-template-columns:1fr 1fr 44px auto; gap:8px; align-items:center; margin-bottom:10px; }
+  .flavor-color-swatch { width:44px; height:38px; padding:2px; border-radius:6px; cursor:pointer; background:var(--surface2); border:1px solid var(--border); }
+  .weight-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; margin-bottom:6px; }
+  .weight-row input, .weight-row select { flex:1; min-width:80px; padding:7px 10px; font-size:13px; }
+  .weight-row .w-img { flex:2; min-width:140px; }
+  .weight-row .w-del { flex:0 0 auto; }
+
   @media (max-width: 600px) {
     .main { padding: 16px; }
     .grid-2 { grid-template-columns: 1fr; }
@@ -319,6 +330,15 @@
           <div class="upload-status" id="m-upload-status"></div>
         </div>
       </div>
+
+      <!-- ── Variants section ── -->
+      <div id="variants-section">
+        <div class="variants-header">
+          <h4>Variants (Flavors &amp; Weights)</h4>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addFlavor()">+ Add Flavor</button>
+        </div>
+        <div id="flavors-container"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeProductModal()">Cancel</button>
@@ -407,6 +427,7 @@
   // ── Products ─────────────────────────────────────────────────────────────
 
   let allProducts = [];
+  let variantData = [];   // [{name_ar, name_en, variants:[{weight,price,old_price,image,in_stock}]}]
 
   async function loadProducts() {
     const res = await fetch(`${API}/products`, { headers: { "Authorization": `Bearer ${token}` } });
@@ -467,19 +488,29 @@
       document.getElementById("m-slug").value = p.slug;
       document.getElementById("m-cat-ar").value = p.category.ar;
       document.getElementById("m-cat-en").value = p.category.en;
-      document.getElementById("m-price").value = p.price;
-      document.getElementById("m-old-price").value = p.old_price || "";
+      document.getElementById("m-price").value = p.has_variants ? "" : p.price;
+      document.getElementById("m-old-price").value = p.has_variants ? "" : (p.old_price || "");
       document.getElementById("m-rating").value = p.rating;
       document.getElementById("m-desc-ar").value = p.description.ar;
       document.getElementById("m-desc-en").value = p.description.en;
       document.getElementById("m-in-stock").value = p.in_stock ? "1" : "0";
       document.getElementById("m-image").value = p.image;
       if (p.image) { preview.src = p.image; preview.style.display = "block"; }
+      // Load variants
+      variantData = (p.flavors || []).map(f => ({
+        name_ar: f.name.ar, name_en: f.name.en, color: f.color || '#cccccc',
+        variants: (f.variants || []).map(v => ({
+          weight: v.weight, price: v.price, old_price: v.old_price || "",
+          image: v.image || "", in_stock: v.in_stock
+        }))
+      }));
     } else {
       ["m-id","m-name-ar","m-name-en","m-slug","m-cat-ar","m-cat-en","m-price","m-old-price","m-desc-ar","m-desc-en","m-image"].forEach(fid => document.getElementById(fid).value = "");
       document.getElementById("m-rating").value = "5";
       document.getElementById("m-in-stock").value = "1";
+      variantData = [];
     }
+    renderVariantsSection();
 
     document.getElementById("product-modal").classList.remove("hidden");
   }
@@ -544,8 +575,15 @@
       in_stock: document.getElementById("m-in-stock").value === "1"
     };
 
-    if (!payload.slug || !payload.name_en || !payload.name_ar || !payload.price) {
-      toast("Please fill in all required fields", "error"); return;
+    syncVariantDataFromDOM();
+    payload.flavors = variantData;
+
+    // Price required only when no variants
+    if (!payload.slug || !payload.name_en || !payload.name_ar) {
+      toast("Please fill in name and slug", "error"); return;
+    }
+    if (!variantData.length && !payload.price) {
+      toast("Price is required when no variants are defined", "error"); return;
     }
 
     const btn = document.getElementById("save-btn");
@@ -607,6 +645,106 @@
         <td style="font-size:12px;color:#888;">${o.created_at.slice(0,16).replace("T"," ")}</td>
       </tr>
     `).join("");
+  }
+
+  // ── Variant management ────────────────────────────────────────────────────
+
+  function syncVariantDataFromDOM() {
+    const container = document.getElementById("flavors-container");
+    if (!container) return;
+    container.querySelectorAll(".flavor-card").forEach((card, fi) => {
+      if (!variantData[fi]) return;
+      variantData[fi].name_ar = card.querySelector("[data-field=name_ar]").value.trim();
+      variantData[fi].name_en = card.querySelector("[data-field=name_en]").value.trim();
+      variantData[fi].color   = card.querySelector("[data-field=color]").value;
+      card.querySelectorAll(".weight-row").forEach((row, vi) => {
+        if (!variantData[fi].variants[vi]) return;
+        variantData[fi].variants[vi].weight    = row.querySelector("[data-field=weight]").value.trim();
+        variantData[fi].variants[vi].price     = row.querySelector("[data-field=price]").value;
+        variantData[fi].variants[vi].old_price = row.querySelector("[data-field=old_price]").value || "";
+        variantData[fi].variants[vi].in_stock  = row.querySelector("[data-field=in_stock]").value === "1";
+        variantData[fi].variants[vi].image     = row.querySelector("[data-field=image]").value.trim();
+      });
+    });
+  }
+
+  function renderVariantsSection() {
+    const container = document.getElementById("flavors-container");
+    if (!container) return;
+    if (!variantData.length) { container.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px 0;">No flavors yet. Click "+ Add Flavor" to add variants.</div>`; return; }
+    container.innerHTML = variantData.map((f, fi) => `
+      <div class="flavor-card" data-fi="${fi}">
+        <div class="flavor-name-row">
+          <input placeholder="Flavor name (AR) e.g. طبيعي" value="${esc(f.name_ar)}" data-field="name_ar">
+          <input placeholder="Flavor name (EN) e.g. Natural" value="${esc(f.name_en)}" data-field="name_en">
+          <input type="color" class="flavor-color-swatch" data-field="color" value="${esc(f.color || '#cccccc')}" title="Flavor circle color">
+          <button class="btn btn-danger btn-sm" onclick="removeFlavor(${fi})">✕ Remove</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Weights</div>
+        ${(f.variants || []).map((v, vi) => `
+          <div class="weight-row">
+            <input data-field="weight" placeholder="e.g. 300g" value="${esc(v.weight)}" title="Weight">
+            <input data-field="price" type="number" min="0" placeholder="Price" value="${v.price || ''}" title="Price (DZD)">
+            <input data-field="old_price" type="number" min="0" placeholder="Old price" value="${v.old_price || ''}" title="Old price">
+            <select data-field="in_stock" title="Stock">
+              <option value="1" ${v.in_stock ? "selected" : ""}>In Stock</option>
+              <option value="0" ${!v.in_stock ? "selected" : ""}>Out</option>
+            </select>
+            <div class="image-field-row w-img">
+              <input data-field="image" placeholder="Image URL" value="${esc(v.image || '')}">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="triggerVariantImageUpload(${fi},${vi})">Choose</button>
+            </div>
+            <input type="file" id="vimg-${fi}-${vi}" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;" onchange="uploadVariantImage(this,${fi},${vi})">
+            <button class="btn btn-danger btn-sm w-del" onclick="removeWeight(${fi},${vi})">✕</button>
+          </div>`).join("")}
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="addWeight(${fi})">+ Add Weight</button>
+      </div>`).join("");
+  }
+
+  function esc(s) { return String(s || "").replace(/"/g, "&quot;"); }
+
+  function addFlavor() {
+    syncVariantDataFromDOM();
+    variantData.push({ name_ar: "", name_en: "", color: "#cccccc", variants: [] });
+    renderVariantsSection();
+  }
+
+  function removeFlavor(fi) {
+    syncVariantDataFromDOM();
+    variantData.splice(fi, 1);
+    renderVariantsSection();
+  }
+
+  function addWeight(fi) {
+    syncVariantDataFromDOM();
+    variantData[fi].variants.push({ weight: "", price: "", old_price: "", image: "", in_stock: true });
+    renderVariantsSection();
+  }
+
+  function removeWeight(fi, vi) {
+    syncVariantDataFromDOM();
+    variantData[fi].variants.splice(vi, 1);
+    renderVariantsSection();
+  }
+
+  function triggerVariantImageUpload(fi, vi) {
+    document.getElementById(`vimg-${fi}-${vi}`)?.click();
+  }
+
+  async function uploadVariantImage(input, fi, vi) {
+    const file = input.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const res = await fetch(`${API}/upload-image`, { method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      syncVariantDataFromDOM();
+      if (variantData[fi]?.variants[vi]) variantData[fi].variants[vi].image = data.image;
+      renderVariantsSection();
+      toast("Image uploaded", "success");
+    } catch (e) { toast("Upload failed: " + e.message, "error"); }
   }
 
   // ── Toast ─────────────────────────────────────────────────────────────────

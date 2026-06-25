@@ -6,6 +6,9 @@ const db = new DatabaseSync(path.join(__dirname, "homenutrition.db"));
 
 db.exec("PRAGMA journal_mode = WAL");
 
+// ── Migration: add color column to product_flavors if missing ────────────────
+try { db.exec("ALTER TABLE product_flavors ADD COLUMN color TEXT DEFAULT '#cccccc'"); } catch {}
+
 // ── Schema ──────────────────────────────────────────────────────────────────
 
 db.exec(`
@@ -52,6 +55,26 @@ db.exec(`
     username      TEXT    NOT NULL UNIQUE,
     password_hash TEXT    NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS product_flavors (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    name_ar     TEXT    NOT NULL DEFAULT '',
+    name_en     TEXT    NOT NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS product_variants (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    flavor_id   INTEGER NOT NULL REFERENCES product_flavors(id) ON DELETE CASCADE,
+    weight      TEXT    NOT NULL,
+    price       REAL    NOT NULL,
+    old_price   REAL,
+    image       TEXT,
+    in_stock    INTEGER NOT NULL DEFAULT 1,
+    sort_order  INTEGER NOT NULL DEFAULT 0
+  );
 `);
 
 // ── Seed: admin account ──────────────────────────────────────────────────────
@@ -90,7 +113,7 @@ if (productCount === 0) {
   }
 }
 
-// ── Helper: convert flat DB row → API shape ──────────────────────────────────
+// ── Helper: flat DB row → API product shape ──────────────────────────────────
 
 function rowToProduct(row) {
   return {
@@ -107,4 +130,59 @@ function rowToProduct(row) {
   };
 }
 
-module.exports = { db, rowToProduct };
+// ── Helper: fetch flavors + variants for one product ─────────────────────────
+
+function getFlavors(productId) {
+  const flavors = db.prepare(
+    "SELECT * FROM product_flavors WHERE product_id = ? ORDER BY sort_order ASC, id ASC"
+  ).all(productId);
+
+  return flavors.map(f => ({
+    id: f.id,
+    name: { ar: f.name_ar, en: f.name_en },
+    color: f.color || '#cccccc',
+    variants: db.prepare(
+      "SELECT * FROM product_variants WHERE flavor_id = ? ORDER BY sort_order ASC, id ASC"
+    ).all(f.id).map(v => ({
+      id: v.id,
+      weight: v.weight,
+      price: v.price,
+      old_price: v.old_price,
+      image: v.image || null,
+      in_stock: v.in_stock === 1
+    }))
+  }));
+}
+
+// ── Helper: replace all flavors/variants for a product (used in save) ────────
+
+function saveFlavors(productId, flavors) {
+  db.prepare("DELETE FROM product_flavors WHERE product_id = ?").run(productId);
+  if (!Array.isArray(flavors) || !flavors.length) return;
+
+  const insertFlavor  = db.prepare(
+    "INSERT INTO product_flavors (product_id, name_ar, name_en, color, sort_order) VALUES (?, ?, ?, ?, ?)"
+  );
+  const insertVariant = db.prepare(
+    "INSERT INTO product_variants (product_id, flavor_id, weight, price, old_price, image, in_stock, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  );
+
+  flavors.forEach((f, fi) => {
+    const { lastInsertRowid: flavorId } = insertFlavor.run(
+      productId, f.name_ar || "", f.name_en || "", f.color || '#cccccc', fi
+    );
+    (f.variants || []).forEach((v, vi) => {
+      insertVariant.run(
+        productId, flavorId,
+        v.weight || "",
+        parseFloat(v.price) || 0,
+        v.old_price ? parseFloat(v.old_price) : null,
+        v.image || null,
+        v.in_stock ? 1 : 0,
+        vi
+      );
+    });
+  });
+}
+
+module.exports = { db, rowToProduct, getFlavors, saveFlavors };

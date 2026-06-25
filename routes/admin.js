@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { db, rowToProduct } = require("../db");
+const { db, rowToProduct, getFlavors, saveFlavors } = require("../db");
 const { requireAdmin } = require("../middleware/auth");
 const router = express.Router();
 
@@ -62,10 +62,14 @@ router.post("/change-password", requireAdmin, (req, res) => {
 
 // ── Products CRUD ─────────────────────────────────────────────────────────────
 
-// GET /api/admin/products  (includes out-of-stock items)
+// GET /api/admin/products  (includes out-of-stock + variants)
 router.get("/products", requireAdmin, (req, res) => {
   const rows = db.prepare("SELECT * FROM products ORDER BY id ASC").all();
-  res.json(rows.map(rowToProduct));
+  res.json(rows.map(row => {
+    const base = rowToProduct(row);
+    const flavors = getFlavors(row.id);
+    return { ...base, has_variants: flavors.length > 0, flavors };
+  }));
 });
 
 // GET /api/admin/orders
@@ -81,27 +85,37 @@ router.get("/orders", requireAdmin, (req, res) => {
 
 // POST /api/admin/products
 router.post("/products", requireAdmin, (req, res) => {
-  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock } = req.body;
-  if (!slug || !name_ar || !name_en || !category_ar || !category_en || !price) {
+  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors } = req.body;
+  if (!slug || !name_ar || !name_en || !category_ar || !category_en) {
     return res.status(400).json({ error: "Missing required fields" });
   }
+  // price is required only when no variants
+  const hasFlavors = Array.isArray(flavors) && flavors.length > 0;
+  if (!hasFlavors && !price) return res.status(400).json({ error: "Price is required when no variants" });
+
   try {
-    const { lastInsertRowid } = db.prepare(`
+    db.exec("BEGIN");
+    const { lastInsertRowid: productId } = db.prepare(`
       INSERT INTO products (slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock)
       VALUES (@slug, @name_ar, @name_en, @category_ar, @category_en, @price, @old_price, @image, @rating, @desc_ar, @desc_en, @in_stock)
     `).run({
       slug, name_ar, name_en, category_ar, category_en,
-      price: parseFloat(price),
+      price: parseFloat(price) || 0,
       old_price: old_price ? parseFloat(old_price) : null,
       image: image || "images/products/placeholder.jpg",
       rating: parseFloat(rating) || 5,
       desc_ar: desc_ar || "",
       desc_en: desc_en || "",
-      in_stock: in_stock ? 1 : 0
+      in_stock: hasFlavors ? 1 : (in_stock ? 1 : 0)
     });
-    const row = db.prepare("SELECT * FROM products WHERE id = ?").get(lastInsertRowid);
-    res.status(201).json(rowToProduct(row));
+    if (hasFlavors) saveFlavors(productId, flavors);
+    db.exec("COMMIT");
+
+    const row = db.prepare("SELECT * FROM products WHERE id = ?").get(productId);
+    const flavorData = getFlavors(productId);
+    res.status(201).json({ ...rowToProduct(row), has_variants: flavorData.length > 0, flavors: flavorData });
   } catch (e) {
+    db.exec("ROLLBACK");
     if (e.message.includes("UNIQUE")) return res.status(409).json({ error: "Slug already exists" });
     throw e;
   }
@@ -109,38 +123,62 @@ router.post("/products", requireAdmin, (req, res) => {
 
 // PUT /api/admin/products/:id
 router.put("/products/:id", requireAdmin, (req, res) => {
-  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock } = req.body;
+  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors } = req.body;
   const existing = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Product not found" });
 
-  db.prepare(`
-    UPDATE products SET
-      slug = @slug, name_ar = @name_ar, name_en = @name_en,
-      category_ar = @category_ar, category_en = @category_en,
-      price = @price, old_price = @old_price, image = @image,
-      rating = @rating, desc_ar = @desc_ar, desc_en = @desc_en, in_stock = @in_stock
-    WHERE id = @id
-  `).run({
-    id: req.params.id, slug, name_ar, name_en, category_ar, category_en,
-    price: parseFloat(price),
-    old_price: old_price ? parseFloat(old_price) : null,
-    image: image || "images/products/placeholder.jpg",
-    rating: parseFloat(rating) || 5,
-    desc_ar: desc_ar || "",
-    desc_en: desc_en || "",
-    in_stock: in_stock ? 1 : 0
-  });
+  const hasFlavors = Array.isArray(flavors) && flavors.length > 0;
+
+  db.exec("BEGIN");
+  try {
+    db.prepare(`
+      UPDATE products SET
+        slug = @slug, name_ar = @name_ar, name_en = @name_en,
+        category_ar = @category_ar, category_en = @category_en,
+        price = @price, old_price = @old_price, image = @image,
+        rating = @rating, desc_ar = @desc_ar, desc_en = @desc_en, in_stock = @in_stock
+      WHERE id = @id
+    `).run({
+      id: req.params.id, slug, name_ar, name_en, category_ar, category_en,
+      price: parseFloat(price) || 0,
+      old_price: old_price ? parseFloat(old_price) : null,
+      image: image || "images/products/placeholder.jpg",
+      rating: parseFloat(rating) || 5,
+      desc_ar: desc_ar || "",
+      desc_en: desc_en || "",
+      in_stock: hasFlavors ? 1 : (in_stock ? 1 : 0)
+    });
+    saveFlavors(req.params.id, hasFlavors ? flavors : []);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
 
   const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
-  res.json(rowToProduct(row));
+  const flavorData = getFlavors(req.params.id);
+  res.json({ ...rowToProduct(row), has_variants: flavorData.length > 0, flavors: flavorData });
 });
 
 // DELETE /api/admin/products/:id
 router.delete("/products/:id", requireAdmin, (req, res) => {
   const existing = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Product not found" });
-  db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
-  res.json({ success: true });
+
+  db.exec("BEGIN");
+  try {
+    // Delete in FK-safe order: variants first (references both products and flavors),
+    // then flavors, then order_items, then the product itself.
+    db.prepare("DELETE FROM product_variants WHERE product_id = ?").run(req.params.id);
+    db.prepare("DELETE FROM product_flavors WHERE product_id = ?").run(req.params.id);
+    db.prepare("DELETE FROM order_items WHERE product_id = ?").run(req.params.id);
+    db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
+    db.exec("COMMIT");
+    res.json({ success: true });
+  } catch (e) {
+    db.exec("ROLLBACK");
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/admin/products/:id/image  (attach image to existing product)
