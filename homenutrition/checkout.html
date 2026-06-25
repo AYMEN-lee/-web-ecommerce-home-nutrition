@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Nutrition — Checkout</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="container">
+    <span data-i18n="shop">Shop</span>
+    <div class="lang-switch">
+      <button data-lang-btn="ar">العربية</button>
+      <span>|</span>
+      <button data-lang-btn="en">English</button>
+    </div>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="logo">
+      <div class="logo-mark"><img src="images/logo.png" alt="Home Nutrition Logo"></div>
+      <div class="logo-text">HOME NUTRITION<span>GYM SUPPLEMENTS</span></div>
+    </a>
+    <form class="search-bar" onsubmit="return false;">
+      <input type="text" data-i18n-placeholder="search_placeholder" placeholder="ابحث عن منتج...">
+      <button type="submit" aria-label="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+      </button>
+    </form>
+    <nav class="header-actions">
+      <a href="cart.html" class="icon-link">
+        <span style="position:relative;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2l2.4 12.2a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 7H6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="icon-badge" data-cart-count>0</span>
+        </span>
+        <span data-i18n="cart">Cart</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding-top:20px;padding-bottom:24px;">
+  <h1 class="section-title" data-i18n="checkout_title" style="margin-bottom:20px;">Place Order</h1>
+  <div id="checkout-root"></div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="foot-logo">HOME NUTRITION</div>
+    <div>📞 0776 82 00 72 &nbsp;|&nbsp; Khroub, Constantine</div>
+    <div>© 2026 Home Nutrition. All rights reserved.</div>
+  </div>
+</footer>
+
+<nav class="bottom-nav">
+  <div class="container">
+    <a href="index.html" class="icon-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8M5 10v10h14V10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span data-i18n="home">Home</span>
+    </a>
+    <a href="cart.html" class="icon-link">
+      <span style="position:relative;display:inline-flex;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2l2.4 12.2a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 7H6"/></svg>
+        <span class="icon-badge" data-cart-count>0</span>
+      </span>
+      <span data-i18n="cart">Cart</span>
+    </a>
+  </div>
+</nav>
+
+<script src="js/i18n.js"></script>
+<script src="js/cart.js"></script>
+<script src="js/api.js"></script>
+<script src="js/checkout.js"></script>
+</body>
+</html>
