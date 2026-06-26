@@ -121,6 +121,13 @@ function renderCartPage(lang) {
 async function initCartPage() {
   const products = await Api.getProducts();
   PRODUCTS_INDEX = Object.fromEntries(products.map(p => [p.id, p]));
+
+  // Purge items whose products have been deleted from the store
+  const validIds = new Set(products.map(p => p.id));
+  const before = Cart.get();
+  const after  = before.filter(i => validIds.has(i.product_id));
+  if (after.length !== before.length) Cart.save(after);
+
   renderCartPage(Lang.get());
 }
 

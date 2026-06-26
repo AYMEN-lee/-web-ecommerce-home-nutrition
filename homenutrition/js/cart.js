@@ -72,3 +72,4 @@ const Cart = {
 };
 
 document.addEventListener("DOMContentLoaded", () => Cart.updateBadge());
+window.addEventListener("pageshow", () => Cart.updateBadge());
