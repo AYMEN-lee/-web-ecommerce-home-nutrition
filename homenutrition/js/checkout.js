@@ -22,10 +22,22 @@ function formHtml(lang) {
           </div>
         </div>
 
+        <div class="form-row">
+          <div class="form-group" id="g-wilaya">
+            <label data-i18n="state">State (Wilaya)</label>
+            <input type="text" id="f-wilaya" name="wilaya" autocomplete="address-level1">
+            <div class="error-msg" data-i18n="required_field">This field is required</div>
+          </div>
+          <div class="form-group" id="g-commune">
+            <label data-i18n="municipality">Municipality (Commune)</label>
+            <input type="text" id="f-commune" name="commune" autocomplete="address-level2">
+            <div class="error-msg" data-i18n="required_field">This field is required</div>
+          </div>
+        </div>
+
         <div class="form-group" id="g-adresse">
-          <label data-i18n="address">Address</label>
-          <textarea id="f-adresse" name="adresse" rows="3"></textarea>
-          <div class="error-msg" data-i18n="required_field">This field is required</div>
+          <label data-i18n="address_optional">Address (optional — for home delivery)</label>
+          <textarea id="f-adresse" name="adresse" rows="2"></textarea>
         </div>
 
         <div class="form-row">
@@ -78,15 +90,18 @@ function setError(groupId, show) {
 
 function validateForm() {
   let valid = true;
-  const prenom = document.getElementById("f-prenom").value.trim();
-  const nom = document.getElementById("f-nom").value.trim();
-  const adresse = document.getElementById("f-adresse").value.trim();
-  const email = document.getElementById("f-email").value.trim();
-  const phone = document.getElementById("f-phone").value.trim();
+  const prenom  = document.getElementById("f-prenom").value.trim();
+  const nom     = document.getElementById("f-nom").value.trim();
+  const wilaya  = document.getElementById("f-wilaya").value.trim();
+  const commune = document.getElementById("f-commune").value.trim();
+  const adresse = document.getElementById("f-adresse").value.trim(); // optional
+  const email   = document.getElementById("f-email").value.trim();
+  const phone   = document.getElementById("f-phone").value.trim();
 
-  setError("g-prenom", !prenom); if (!prenom) valid = false;
-  setError("g-nom", !nom); if (!nom) valid = false;
-  setError("g-adresse", !adresse); if (!adresse) valid = false;
+  setError("g-prenom",  !prenom);  if (!prenom)  valid = false;
+  setError("g-nom",     !nom);     if (!nom)      valid = false;
+  setError("g-wilaya",  !wilaya);  if (!wilaya)   valid = false;
+  setError("g-commune", !commune); if (!commune)  valid = false;
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   setError("g-email", !emailOk); if (!emailOk) valid = false;
@@ -94,7 +109,7 @@ function validateForm() {
   const phoneOk = /^0[5-7][0-9]{8}$/.test(phone.replace(/\s/g, ""));
   setError("g-phone", !phoneOk); if (!phoneOk) valid = false;
 
-  return valid ? { prenom, nom, adresse, email, telephone: phone } : null;
+  return valid ? { prenom, nom, wilaya, commune, adresse, email, telephone: phone } : null;
 }
 
 function showSuccessScreen(lang, orderId) {

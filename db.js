@@ -6,8 +6,10 @@ const db = new DatabaseSync(path.join(__dirname, "homenutrition.db"));
 
 db.exec("PRAGMA journal_mode = WAL");
 
-// ── Migration: add color column to product_flavors if missing ────────────────
+// ── Migrations ───────────────────────────────────────────────────────────────
 try { db.exec("ALTER TABLE product_flavors ADD COLUMN color TEXT DEFAULT '#cccccc'"); } catch {}
+try { db.exec("ALTER TABLE orders ADD COLUMN wilaya TEXT NOT NULL DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE orders ADD COLUMN commune TEXT NOT NULL DEFAULT ''"); } catch {}
 
 // ── Schema ──────────────────────────────────────────────────────────────────
 

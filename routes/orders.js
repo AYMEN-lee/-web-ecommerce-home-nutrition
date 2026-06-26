@@ -4,9 +4,9 @@ const router = express.Router();
 
 // POST /api/orders
 router.post("/", (req, res) => {
-  const { prenom, nom, adresse, email, telephone, items } = req.body;
+  const { prenom, nom, wilaya, commune, adresse, email, telephone, items } = req.body;
 
-  if (!prenom || !nom || !adresse || !email || !telephone || !Array.isArray(items) || !items.length) {
+  if (!prenom || !nom || !wilaya || !commune || !email || !telephone || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
@@ -52,8 +52,8 @@ router.post("/", (req, res) => {
   db.exec("BEGIN");
   try {
     const { lastInsertRowid } = db.prepare(
-      "INSERT INTO orders (order_ref, prenom, nom, adresse, email, telephone, total) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(orderRef, prenom, nom, adresse, email, telephone, total);
+      "INSERT INTO orders (order_ref, prenom, nom, wilaya, commune, adresse, email, telephone, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(orderRef, prenom, nom, wilaya || "", commune || "", adresse || "", email, telephone, total);
 
     const insertItem = db.prepare(
       "INSERT INTO order_items (order_id, product_id, qty, unit_price) VALUES (?, ?, ?, ?)"

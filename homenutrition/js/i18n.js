@@ -39,7 +39,10 @@ const I18N = {
     invalid_email: "بريد إلكتروني غير صالح",
     invalid_phone: "رقم هاتف غير صالح",
     flavor: "النكهة",
-    weight: "الوزن"
+    weight: "الوزن",
+    state: "الولاية",
+    municipality: "البلدية",
+    address_optional: "العنوان (اختياري - للتوصيل للمنزل)"
   },
   en: {
     search_placeholder: "Search for product...",
@@ -76,7 +79,10 @@ const I18N = {
     invalid_email: "Invalid email address",
     invalid_phone: "Invalid phone number",
     flavor: "Flavor",
-    weight: "Weight"
+    weight: "Weight",
+    state: "State (Wilaya)",
+    municipality: "Municipality (Commune)",
+    address_optional: "Address (optional — for home delivery)"
   }
 };
 

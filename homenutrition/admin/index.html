@@ -636,7 +636,8 @@
         <td>${o.order_ref}</td>
         <td>
           <div>${o.prenom} ${o.nom}</div>
-          <div class="order-detail">${o.adresse}</div>
+          <div class="order-detail">${o.wilaya || ""}${o.commune ? " — " + o.commune : ""}</div>
+          ${o.adresse ? `<div class="order-detail">${o.adresse}</div>` : ""}
           <div class="order-detail">${o.email}</div>
         </td>
         <td>${o.telephone}</td>
