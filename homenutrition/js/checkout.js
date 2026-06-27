@@ -67,6 +67,16 @@ function formHtml(lang) {
     </div>`;
 }
 
+function resolveVariantPrice(item, p) {
+  if (item.variant_id && p.flavors) {
+    for (const f of p.flavors) {
+      const v = (f.variants || []).find(v => v.id === item.variant_id);
+      if (v) return v.price;
+    }
+  }
+  return p.price;
+}
+
 function renderSummary(lang) {
   const items = Cart.get();
   const wrap = document.getElementById("summary-items");
@@ -75,9 +85,15 @@ function renderSummary(lang) {
   wrap.innerHTML = items.map(item => {
     const p = CHECKOUT_PRODUCTS[item.product_id];
     if (!p) return "";
-    const lineTotal = p.price * item.qty;
+    const price = resolveVariantPrice(item, p);
+    const lineTotal = price * item.qty;
     total += lineTotal;
-    return `<div class="summary-item"><span>${p.name[lang]} × ${item.qty}</span><span>${lineTotal.toLocaleString()}</span></div>`;
+    const flavorLabel = lang === "ar" ? (item.flavor_ar || item.flavor_en) : (item.flavor_en || item.flavor_ar);
+    const detail = [flavorLabel, item.weight].filter(Boolean).join(" · ");
+    return `<div class="summary-item">
+      <span>${p.name[lang]} × ${item.qty}${detail ? `<div style="font-size:11px;color:#888;margin-top:2px;">${detail}</div>` : ""}</span>
+      <span>${lineTotal.toLocaleString()}</span>
+    </div>`;
   }).join("");
   const totalEl = document.getElementById("summary-total");
   if (totalEl) totalEl.innerHTML = `${total.toLocaleString()} <span>${Lang.t("da")}</span>`;

@@ -14,6 +14,17 @@ function emptyCartHtml() {
     </div>`;
 }
 
+// Resolve the stock_qty limit for a cart item (null = unlimited)
+function itemStockQty(item, p) {
+  if (item.variant_id && p.flavors) {
+    for (const f of p.flavors) {
+      const v = (f.variants || []).find(v => v.id === item.variant_id);
+      if (v) return v.stock_qty ?? null;
+    }
+  }
+  return p.stock_qty ?? null;
+}
+
 // Resolve the price for a cart item — use variant price when available
 function itemPrice(item, p) {
   if (item.variant_id && p.flavors) {
@@ -95,7 +106,11 @@ function renderCartPage(lang) {
   root.querySelectorAll("[data-incr]").forEach(btn => btn.addEventListener("click", () => {
     const idx  = Number(btn.getAttribute("data-incr"));
     const item = Cart.get()[idx];
-    if (item) Cart.setQty(item.product_id, item.qty + 1, item.variant_id ?? null);
+    if (!item) return;
+    const maxQty = PRODUCTS_INDEX[item.product_id] ? itemStockQty(item, PRODUCTS_INDEX[item.product_id]) : null;
+    const newQty = item.qty + 1;
+    if (maxQty !== null && newQty > maxQty) return;
+    Cart.setQty(item.product_id, newQty, item.variant_id ?? null);
     renderCartPage(Lang.get());
   }));
   root.querySelectorAll("[data-decr]").forEach(btn => btn.addEventListener("click", () => {
@@ -107,7 +122,11 @@ function renderCartPage(lang) {
   root.querySelectorAll("[data-qty]").forEach(input => input.addEventListener("change", () => {
     const idx  = Number(input.getAttribute("data-qty"));
     const item = Cart.get()[idx];
-    if (item) Cart.setQty(item.product_id, Math.max(1, Number(input.value) || 1), item.variant_id ?? null);
+    if (!item) return;
+    const maxQty = PRODUCTS_INDEX[item.product_id] ? itemStockQty(item, PRODUCTS_INDEX[item.product_id]) : null;
+    let newQty = Math.max(1, Number(input.value) || 1);
+    if (maxQty !== null) newQty = Math.min(newQty, maxQty);
+    Cart.setQty(item.product_id, newQty, item.variant_id ?? null);
     renderCartPage(Lang.get());
   }));
   root.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", () => {

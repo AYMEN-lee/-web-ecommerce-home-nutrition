@@ -10,6 +10,11 @@ db.exec("PRAGMA journal_mode = WAL");
 try { db.exec("ALTER TABLE product_flavors ADD COLUMN color TEXT DEFAULT '#cccccc'"); } catch {}
 try { db.exec("ALTER TABLE orders ADD COLUMN wilaya TEXT NOT NULL DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE orders ADD COLUMN commune TEXT NOT NULL DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE products ADD COLUMN stock_qty INTEGER"); } catch {}
+try { db.exec("ALTER TABLE product_variants ADD COLUMN stock_qty INTEGER"); } catch {}
+try { db.exec("ALTER TABLE order_items ADD COLUMN variant_id INTEGER"); } catch {}
+try { db.exec("ALTER TABLE order_items ADD COLUMN flavor TEXT NOT NULL DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE order_items ADD COLUMN weight TEXT NOT NULL DEFAULT ''"); } catch {}
 
 // ── Schema ──────────────────────────────────────────────────────────────────
 
@@ -128,7 +133,8 @@ function rowToProduct(row) {
     image: row.image,
     rating: row.rating,
     description: { ar: row.desc_ar, en: row.desc_en },
-    in_stock: row.in_stock === 1
+    in_stock: row.in_stock === 1,
+    stock_qty: row.stock_qty ?? null
   };
 }
 
@@ -151,7 +157,8 @@ function getFlavors(productId) {
       price: v.price,
       old_price: v.old_price,
       image: v.image || null,
-      in_stock: v.in_stock === 1
+      in_stock: v.in_stock === 1,
+      stock_qty: v.stock_qty ?? null
     }))
   }));
 }
@@ -166,7 +173,7 @@ function saveFlavors(productId, flavors) {
     "INSERT INTO product_flavors (product_id, name_ar, name_en, color, sort_order) VALUES (?, ?, ?, ?, ?)"
   );
   const insertVariant = db.prepare(
-    "INSERT INTO product_variants (product_id, flavor_id, weight, price, old_price, image, in_stock, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO product_variants (product_id, flavor_id, weight, price, old_price, image, in_stock, sort_order, stock_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
 
   flavors.forEach((f, fi) => {
@@ -174,14 +181,19 @@ function saveFlavors(productId, flavors) {
       productId, f.name_ar || "", f.name_en || "", f.color || '#cccccc', fi
     );
     (f.variants || []).forEach((v, vi) => {
+      const sqty = (v.stock_qty !== null && v.stock_qty !== "" && v.stock_qty !== undefined)
+        ? parseInt(v.stock_qty) : null;
+      // When qty is tracked, derive in_stock from it; otherwise use explicit in_stock flag
+      const inStock = sqty !== null ? (sqty > 0 ? 1 : 0) : (v.in_stock ? 1 : 0);
       insertVariant.run(
         productId, flavorId,
         v.weight || "",
         parseFloat(v.price) || 0,
         v.old_price ? parseFloat(v.old_price) : null,
         v.image || null,
-        v.in_stock ? 1 : 0,
-        vi
+        inStock,
+        vi,
+        sqty
       );
     });
   });

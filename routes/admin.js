@@ -76,16 +76,72 @@ router.get("/products", requireAdmin, (req, res) => {
 router.get("/orders", requireAdmin, (req, res) => {
   const orders = db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all();
   const getItems = db.prepare(`
-    SELECT oi.qty, oi.unit_price, p.name_ar, p.name_en, p.slug
+    SELECT oi.qty, oi.unit_price, oi.variant_id, oi.flavor, oi.weight,
+           p.name_ar, p.name_en, p.slug
     FROM order_items oi JOIN products p ON p.id = oi.product_id
     WHERE oi.order_id = ?
   `);
   res.json(orders.map(o => ({ ...o, items: getItems.all(o.id) })));
 });
 
+// POST /api/admin/orders/:id/confirm
+router.post("/orders/:id/confirm", requireAdmin, (req, res) => {
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.status !== "pending") {
+    return res.status(400).json({ error: `Order is already ${order.status}` });
+  }
+
+  const items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(order.id);
+
+  db.exec("BEGIN");
+  try {
+    for (const item of items) {
+      if (item.variant_id) {
+        const v = db.prepare("SELECT stock_qty FROM product_variants WHERE id = ?").get(item.variant_id);
+        if (v && v.stock_qty !== null) {
+          if (v.stock_qty < item.qty) {
+            db.exec("ROLLBACK");
+            return res.status(400).json({ error: "Not enough stock to confirm this order" });
+          }
+          const newQty = v.stock_qty - item.qty;
+          db.prepare("UPDATE product_variants SET stock_qty = ?, in_stock = ? WHERE id = ?")
+            .run(newQty, newQty > 0 ? 1 : 0, item.variant_id);
+        }
+      } else {
+        const p = db.prepare("SELECT stock_qty FROM products WHERE id = ?").get(item.product_id);
+        if (p && p.stock_qty !== null) {
+          if (p.stock_qty < item.qty) {
+            db.exec("ROLLBACK");
+            return res.status(400).json({ error: "Not enough stock to confirm this order" });
+          }
+          const newQty = p.stock_qty - item.qty;
+          db.prepare("UPDATE products SET stock_qty = ?, in_stock = ? WHERE id = ?")
+            .run(newQty, newQty > 0 ? 1 : 0, item.product_id);
+        }
+      }
+    }
+    db.prepare("UPDATE orders SET status = 'confirmed' WHERE id = ?").run(order.id);
+    db.exec("COMMIT");
+    res.json({ success: true });
+  } catch (e) {
+    db.exec("ROLLBACK");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/orders/:id/cancel
+router.post("/orders/:id/cancel", requireAdmin, (req, res) => {
+  const order = db.prepare("SELECT id, status FROM orders WHERE id = ?").get(req.params.id);
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.status === "cancelled") return res.status(400).json({ error: "Order is already cancelled" });
+  db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(order.id);
+  res.json({ success: true });
+});
+
 // POST /api/admin/products
 router.post("/products", requireAdmin, (req, res) => {
-  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors } = req.body;
+  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors, stock_qty } = req.body;
   if (!slug || !name_ar || !name_en || !category_ar || !category_en) {
     return res.status(400).json({ error: "Missing required fields" });
   }
@@ -93,11 +149,13 @@ router.post("/products", requireAdmin, (req, res) => {
   const hasFlavors = Array.isArray(flavors) && flavors.length > 0;
   if (!hasFlavors && !price) return res.status(400).json({ error: "Price is required when no variants" });
 
+  const sqty = (stock_qty !== null && stock_qty !== undefined && stock_qty !== "") ? parseInt(stock_qty) : null;
+
   try {
     db.exec("BEGIN");
     const { lastInsertRowid: productId } = db.prepare(`
-      INSERT INTO products (slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock)
-      VALUES (@slug, @name_ar, @name_en, @category_ar, @category_en, @price, @old_price, @image, @rating, @desc_ar, @desc_en, @in_stock)
+      INSERT INTO products (slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, stock_qty)
+      VALUES (@slug, @name_ar, @name_en, @category_ar, @category_en, @price, @old_price, @image, @rating, @desc_ar, @desc_en, @in_stock, @stock_qty)
     `).run({
       slug, name_ar, name_en, category_ar, category_en,
       price: parseFloat(price) || 0,
@@ -106,7 +164,8 @@ router.post("/products", requireAdmin, (req, res) => {
       rating: parseFloat(rating) || 5,
       desc_ar: desc_ar || "",
       desc_en: desc_en || "",
-      in_stock: hasFlavors ? 1 : (in_stock ? 1 : 0)
+      in_stock: hasFlavors ? 1 : (sqty !== null ? (sqty > 0 ? 1 : 0) : (in_stock ? 1 : 0)),
+      stock_qty: sqty
     });
     if (hasFlavors) saveFlavors(productId, flavors);
     db.exec("COMMIT");
@@ -123,11 +182,12 @@ router.post("/products", requireAdmin, (req, res) => {
 
 // PUT /api/admin/products/:id
 router.put("/products/:id", requireAdmin, (req, res) => {
-  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors } = req.body;
+  const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors, stock_qty } = req.body;
   const existing = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Product not found" });
 
   const hasFlavors = Array.isArray(flavors) && flavors.length > 0;
+  const sqty = (stock_qty !== null && stock_qty !== undefined && stock_qty !== "") ? parseInt(stock_qty) : null;
 
   db.exec("BEGIN");
   try {
@@ -136,7 +196,7 @@ router.put("/products/:id", requireAdmin, (req, res) => {
         slug = @slug, name_ar = @name_ar, name_en = @name_en,
         category_ar = @category_ar, category_en = @category_en,
         price = @price, old_price = @old_price, image = @image,
-        rating = @rating, desc_ar = @desc_ar, desc_en = @desc_en, in_stock = @in_stock
+        rating = @rating, desc_ar = @desc_ar, desc_en = @desc_en, in_stock = @in_stock, stock_qty = @stock_qty
       WHERE id = @id
     `).run({
       id: req.params.id, slug, name_ar, name_en, category_ar, category_en,
@@ -146,7 +206,8 @@ router.put("/products/:id", requireAdmin, (req, res) => {
       rating: parseFloat(rating) || 5,
       desc_ar: desc_ar || "",
       desc_en: desc_en || "",
-      in_stock: hasFlavors ? 1 : (in_stock ? 1 : 0)
+      in_stock: hasFlavors ? 1 : (sqty !== null ? (sqty > 0 ? 1 : 0) : (in_stock ? 1 : 0)),
+      stock_qty: sqty
     });
     saveFlavors(req.params.id, hasFlavors ? flavors : []);
     db.exec("COMMIT");

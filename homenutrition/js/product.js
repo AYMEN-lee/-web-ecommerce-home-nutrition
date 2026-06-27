@@ -71,7 +71,7 @@ function renderProduct(p, lang) {
         <div class="pd-actions">
           <button class="btn btn-dark" id="add-to-cart-btn">${Lang.t("add_to_cart")}</button>
           <a class="btn btn-primary" id="buy-now-btn"
-             href="${isPages ? '../' : ''}checkout.html">${Lang.t("buy_now")}</a>
+             href="${isPages ? '../' : ''}cart.html">${Lang.t("buy_now")}</a>
         </div>
 
         <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
@@ -88,14 +88,16 @@ function renderProduct(p, lang) {
     // Show stock for the first variant — don't auto-swap the main product image
     const firstVariant = p.flavors[0]?.variants?.[0];
     if (firstVariant) {
-      updateStockLabel(firstVariant.in_stock, lang);
+      updateStockLabel(firstVariant.in_stock, lang, firstVariant.stock_qty);
+      setQtyMax(firstVariant.stock_qty);
       const cartBtn = document.getElementById("add-to-cart-btn");
       if (cartBtn) cartBtn.disabled = !firstVariant.in_stock;
     } else {
       updateStockLabel(p.in_stock, lang);
     }
   } else {
-    updateStockLabel(p.in_stock, lang);
+    updateStockLabel(p.in_stock, lang, p.stock_qty);
+    setQtyMax(p.stock_qty);
   }
 }
 
@@ -210,22 +212,37 @@ function applyVariant(p, lang, isPages) {
   }
 
   // Stock
-  updateStockLabel(v.in_stock, lang);
+  updateStockLabel(v.in_stock, lang, v.stock_qty);
+  setQtyMax(v.stock_qty);
 
   // Disable add-to-cart if out of stock
   const cartBtn = document.getElementById("add-to-cart-btn");
   if (cartBtn) cartBtn.disabled = !v.in_stock;
 }
 
-function updateStockLabel(inStock, lang) {
+function updateStockLabel(inStock, lang, stockQty = null) {
   const el = document.getElementById("pd-stock-label");
   if (!el) return;
   if (inStock) {
-    el.textContent = lang === "ar" ? "✓ متوفر في المخزن" : "✓ In Stock";
+    const qtyNote = (stockQty !== null && stockQty <= 10)
+      ? ` — ${stockQty} ${lang === "ar" ? "متبقية" : "left"}`
+      : "";
+    el.textContent = (lang === "ar" ? "✓ متوفر في المخزن" : "✓ In Stock") + qtyNote;
     el.style.color = "#38a169";
   } else {
     el.textContent = lang === "ar" ? "✗ نفد المخزون" : "✗ Out of Stock";
     el.style.color = "#e53e3e";
+  }
+}
+
+function setQtyMax(stockQty) {
+  const inp = document.getElementById("qty-input");
+  if (!inp) return;
+  if (stockQty !== null) {
+    inp.max = stockQty;
+    if (Number(inp.value) > stockQty) inp.value = stockQty;
+  } else {
+    inp.removeAttribute("max");
   }
 }
 
@@ -236,9 +253,15 @@ function wireQtyControls() {
     const inp = document.getElementById("qty-input");
     inp.value = Math.max(1, Number(inp.value) - 1);
   });
+  document.getElementById("qty-input")?.addEventListener("change", () => {
+    const inp = document.getElementById("qty-input");
+    const max = inp.max !== "" ? Number(inp.max) : Infinity;
+    inp.value = Math.min(max, Math.max(1, Number(inp.value) || 1));
+  });
   document.getElementById("qty-plus")?.addEventListener("click", () => {
     const inp = document.getElementById("qty-input");
-    inp.value = Number(inp.value) + 1;
+    const max = inp.max !== "" ? Number(inp.max) : Infinity;
+    inp.value = Math.min(max, Number(inp.value) + 1);
   });
 }
 
@@ -251,16 +274,32 @@ function wireCartButtons(p, lang, isPages) {
   function doAddToCart() {
     const qty = Number(document.getElementById("qty-input").value) || 1;
     const v = currentVariant();
+    const variantId  = v ? v.id : null;
+    const stockLimit = v ? (v.stock_qty ?? null) : (p.stock_qty ?? null);
+
+    // How many of this exact variant are already sitting in the cart
+    const existing = Cart.get().find(i =>
+      i.product_id === p.id && (i.variant_id ?? null) === variantId
+    );
+    const alreadyInCart = existing ? existing.qty : 0;
+
+    // Never exceed stock_qty (null = unlimited)
+    let addQty = qty;
+    if (stockLimit !== null) {
+      addQty = Math.min(qty, stockLimit - alreadyInCart);
+      if (addQty <= 0) return;
+    }
+
     if (v) {
       const flavor = p.flavors[selectedFlavorIdx];
-      Cart.add(p.id, qty, {
+      Cart.add(p.id, addQty, {
         variant_id: v.id,
         flavor_en:  flavor.name.en,
         flavor_ar:  flavor.name.ar,
         weight:     v.weight
       });
     } else {
-      Cart.add(p.id, qty);
+      Cart.add(p.id, addQty);
     }
   }
 
