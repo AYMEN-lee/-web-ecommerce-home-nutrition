@@ -246,7 +246,16 @@
 
     <!-- Orders tab -->
     <div id="tab-orders" style="display:none;">
-      <div class="section-header"><h2>Orders</h2></div>
+      <div class="section-header">
+        <h2>Orders</h2>
+        <button class="btn btn-danger btn-sm" id="delete-cancelled-btn" onclick="deleteAllCancelled()" style="display:none;">🗑 Delete All Cancelled</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;" id="order-filters">
+        <button class="btn btn-primary btn-sm" data-filter="all"       onclick="setOrderFilter('all')">All</button>
+        <button class="btn btn-ghost btn-sm"   data-filter="pending"   onclick="setOrderFilter('pending')">Pending</button>
+        <button class="btn btn-ghost btn-sm"   data-filter="confirmed" onclick="setOrderFilter('confirmed')">Confirmed</button>
+        <button class="btn btn-ghost btn-sm"   data-filter="cancelled" onclick="setOrderFilter('cancelled')">Cancelled</button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -656,9 +665,15 @@
   // ── Orders ────────────────────────────────────────────────────────────────
 
   let allOrders = [];
+  let orderFilter = "all";
 
   const STATUS_BADGE = { pending: "badge-yellow", confirmed: "badge-green", cancelled: "badge-red" };
   const STATUS_LABEL = { pending: "Pending", confirmed: "Confirmed", cancelled: "Cancelled" };
+
+  function setOrderFilter(status) {
+    orderFilter = status;
+    renderOrders();
+  }
 
   async function loadOrders() {
     const res = await fetch(`${API}/orders`, { headers: { "Authorization": `Bearer ${token}` } });
@@ -667,12 +682,26 @@
   }
 
   function renderOrders() {
+    // Update filter button labels with live counts and active state
+    const counts = { all: allOrders.length, pending: 0, confirmed: 0, cancelled: 0 };
+    allOrders.forEach(o => { if (o.status in counts) counts[o.status]++; });
+    document.querySelectorAll("#order-filters [data-filter]").forEach(btn => {
+      const f = btn.getAttribute("data-filter");
+      const name = f === "all" ? "All" : (STATUS_LABEL[f] || f);
+      btn.textContent = `${name} (${counts[f] ?? 0})`;
+      btn.className = f === orderFilter ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm";
+    });
+    const delBtn = document.getElementById("delete-cancelled-btn");
+    if (delBtn) delBtn.style.display = counts.cancelled > 0 ? "" : "none";
+
+    const filtered = orderFilter === "all" ? allOrders : allOrders.filter(o => o.status === orderFilter);
     const tbody = document.getElementById("orders-tbody");
-    if (!allOrders.length) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#888;padding:32px;">No orders yet</td></tr>`;
+    if (!filtered.length) {
+      const msg = orderFilter === "all" ? "No orders yet" : `No ${STATUS_LABEL[orderFilter] || orderFilter} orders`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#888;padding:32px;">${msg}</td></tr>`;
       return;
     }
-    tbody.innerHTML = allOrders.map(o => {
+    tbody.innerHTML = filtered.map(o => {
       const badgeCls = STATUS_BADGE[o.status] || "badge-yellow";
       const label    = STATUS_LABEL[o.status] || o.status;
       const isPending   = o.status === "pending";
@@ -707,6 +736,7 @@
               <button class="btn btn-success btn-sm" onclick="confirmOrder(${o.id})" ${!isPending ? "disabled" : ""}>✓ Confirm</button>
               <button class="btn btn-danger btn-sm" onclick="cancelOrder(${o.id})" ${isCancelled ? "disabled" : ""}>✕ Cancel</button>
               <button class="btn btn-ghost btn-sm" onclick="viewOrderDetails(${o.id})">Details</button>
+              ${isCancelled ? `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${o.id})">🗑 Delete</button>` : ""}
             </div>
           </td>
         </tr>`;
@@ -730,6 +760,27 @@
       const data = await res.json();
       if (res.ok) { await loadOrders(); toast("Order cancelled", "success"); }
       else toast(data.error || "Failed to cancel", "error");
+    } catch (e) { toast("Error: " + e.message, "error"); }
+  }
+
+  async function deleteOrder(id) {
+    if (!confirm("Permanently delete this cancelled order?")) return;
+    try {
+      const res = await fetch(`${API}/orders/${id}`, { method: "DELETE", headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) { await loadOrders(); toast("Order deleted", "success"); }
+      else toast(data.error || "Failed to delete", "error");
+    } catch (e) { toast("Error: " + e.message, "error"); }
+  }
+
+  async function deleteAllCancelled() {
+    const count = allOrders.filter(o => o.status === "cancelled").length;
+    if (!confirm(`Permanently delete all ${count} cancelled order(s)? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API}/orders/cancelled`, { method: "DELETE", headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) { await loadOrders(); toast(`${data.deleted} cancelled order(s) deleted`, "success"); }
+      else toast(data.error || "Failed to delete", "error");
     } catch (e) { toast("Error: " + e.message, "error"); }
   }
 

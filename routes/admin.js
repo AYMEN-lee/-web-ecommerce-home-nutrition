@@ -139,6 +139,39 @@ router.post("/orders/:id/cancel", requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// DELETE /api/admin/orders/cancelled  — bulk delete all cancelled orders (must be before /:id)
+router.delete("/orders/cancelled", requireAdmin, (req, res) => {
+  const rows = db.prepare("SELECT id FROM orders WHERE status = 'cancelled'").all();
+  if (!rows.length) return res.json({ success: true, deleted: 0 });
+  db.exec("BEGIN");
+  try {
+    for (const o of rows) db.prepare("DELETE FROM order_items WHERE order_id = ?").run(o.id);
+    const { changes } = db.prepare("DELETE FROM orders WHERE status = 'cancelled'").run();
+    db.exec("COMMIT");
+    res.json({ success: true, deleted: changes });
+  } catch (e) {
+    db.exec("ROLLBACK");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/admin/orders/:id  — delete a single cancelled order
+router.delete("/orders/:id", requireAdmin, (req, res) => {
+  const order = db.prepare("SELECT id, status FROM orders WHERE id = ?").get(req.params.id);
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.status !== "cancelled") return res.status(400).json({ error: "Only cancelled orders can be deleted" });
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM order_items WHERE order_id = ?").run(order.id);
+    db.prepare("DELETE FROM orders WHERE id = ?").run(order.id);
+    db.exec("COMMIT");
+    res.json({ success: true });
+  } catch (e) {
+    db.exec("ROLLBACK");
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/admin/products
 router.post("/products", requireAdmin, (req, res) => {
   const { slug, name_ar, name_en, category_ar, category_en, price, old_price, image, rating, desc_ar, desc_en, in_stock, flavors, stock_qty } = req.body;

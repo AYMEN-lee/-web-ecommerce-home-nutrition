@@ -99,7 +99,6 @@ function renderCategoryCards(lang) {
     const isActive = activeCategory === catEn;
     return `
       <button class="category-card ${isActive ? 'active' : ''}" data-caten="${catEn}">
-        <div class="cat-icon">${getCatIcon(isAll ? "all" : catEn)}</div>
         <div class="cat-label">${label}</div>
         <div class="cat-count">${count} ${lang === "ar" ? "منتج" : "items"}</div>
       </button>`;
