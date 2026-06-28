@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+server.log
+server.err
+
+# SQLite temporary files
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code settings (optional)
+.vscode/
+
+# Claude/AI notes (optional)
+PROJECT_DOCUMENTATION.md
+general script of the project.txt
